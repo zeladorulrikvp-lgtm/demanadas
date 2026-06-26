@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico — Ulrik</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#e8e8e8;padding:1.5rem;min-height:100vh}
+h1{font-size:16px;font-weight:700;color:#fff;margin-bottom:1.5rem;border-bottom:2px solid #cc1111;padding-bottom:.75rem}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;display:block;width:100%;text-align:left}
+.btn-red{background:#cc1111;color:#fff}
+.btn-gray{background:#2a2a2a;color:#ccc;border:1px solid #333}
+.result{background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:1rem;margin-top:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;min-height:60px;color:#4ade80;display:none}
+.result.on{display:block}
+.result.err{color:#f87171}
+.result.warn{color:#fbbf24}
+.section{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:1rem;margin-bottom:1rem}
+.section h2{font-size:13px;font-weight:600;color:#aaa;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em}
+label{font-size:12px;color:#888;display:block;margin-bottom:4px}
+input{width:100%;padding:8px 10px;background:#242424;border:1px solid #333;border-radius:7px;color:#e8e8e8;font-size:13px;margin-bottom:8px}
+input:focus{outline:none;border-color:#cc1111}
+.url-atual{font-size:11px;color:#666;word-break:break-all;margin-bottom:1rem;padding:8px;background:#0a0a0a;border-radius:6px;border:1px solid #222}
+</style>
+</head>
+<body>
+
+<h1>🔧 Diagnóstico — Sistema Ulrik</h1>
+
+<div class="url-atual" id="urlAtual">URL: carregando...</div>
+
+<div class="section">
+  <h2>1. Testar conexão (GET)</h2>
+  <p style="font-size:12px;color:#888;margin-bottom:.75rem">Verifica se o Apps Script responde e retorna os dados da planilha.</p>
+  <button class="btn btn-red" onclick="testarGet()">▶ Testar conexão GET</button>
+  <div class="result" id="r-get"></div>
+</div>
+
+<div class="section">
+  <h2>2. Testar envio de demanda (POST)</h2>
+  <p style="font-size:12px;color:#888;margin-bottom:.75rem">Envia um registro de teste para a planilha.</p>
+  <button class="btn btn-red" onclick="testarPost()">▶ Enviar registro de teste</button>
+  <div class="result" id="r-post"></div>
+</div>
+
+<div class="section">
+  <h2>3. Atualizar URL manualmente</h2>
+  <label>Nova URL do Apps Script</label>
+  <input type="url" id="novaUrl" placeholder="https://script.google.com/macros/s/.../exec">
+  <button class="btn btn-gray" onclick="atualizarUrl()">Salvar nova URL</button>
+</div>
+
+<script>
+const URL_PADRAO = 'https://script.google.com/macros/s/AKfycbymAo2o8ggJ3WbwmVEQmZbecJOYFh7aBXjn1XgYI0FqV2FAnpIR1NzRNoU5NIAIGw6AYg/exec';
+let cfg = JSON.parse(localStorage.getItem('cond_cfg') || '{}');
+if(!cfg.url) { cfg.url = URL_PADRAO; localStorage.setItem('cond_cfg', JSON.stringify(cfg)); }
+
+document.getElementById('urlAtual').textContent = 'URL configurada: ' + cfg.url;
+document.getElementById('novaUrl').value = cfg.url;
+
+async function testarGet() {
+  const el = document.getElementById('r-get');
+  el.className = 'result on warn'; el.textContent = 'Aguardando resposta...';
+  try {
+    const r = await fetch(cfg.url + '?t=' + Date.now());
+    const txt = await r.text();
+    try {
+      const d = JSON.parse(txt);
+      if(d.ok) {
+        el.className = 'result on';
+        el.textContent = '✅ CONEXÃO OK!\n\nTotal de registros na planilha: ' + (d.dados||[]).length + '\n\n' +
+          (d.dados && d.dados[0] ? 'Primeiro registro:\n' + JSON.stringify(d.dados[0], null, 2) : 'Planilha vazia.');
+      } else {
+        el.className = 'result on err';
+        el.textContent = '❌ Apps Script retornou erro:\n' + JSON.stringify(d, null, 2);
+      }
+    } catch(e) {
+      el.className = 'result on err';
+      el.textContent = '❌ Resposta não é JSON válido:\n' + txt.substring(0, 500);
+    }
+  } catch(e) {
+    el.className = 'result on err';
+    el.textContent = '❌ Falha de rede:\n' + e.toString() + '\n\nVerifique se a URL está correta e se o Apps Script está publicado como "Qualquer pessoa".';
+  }
+}
+
+async function testarPost() {
+  const el = document.getElementById('r-post');
+  el.className = 'result on warn'; el.textContent = 'Enviando registro de teste...';
+  try {
+    const r = await fetch(cfg.url, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'add',
+        nome: 'TESTE DIAGNÓSTICO',
+        apartamento: '000',
+        contato: 'diagnostico@teste.com',
+        categoria: 'Outro',
+        local: 'Teste automático',
+        descricao: 'Registro de teste do sistema de diagnóstico. Pode apagar.',
+        urgencia: 'Baixa'
+      })
+    });
+    const txt = await r.text();
+    try {
+      const d = JSON.parse(txt);
+      if(d.ok) {
+        el.className = 'result on';
+        el.textContent = '✅ POST OK! Registro criado com protocolo: ' + d.protocolo + '\n\nVerifique sua planilha — o registro de teste deve aparecer lá.';
+      } else {
+        el.className = 'result on err';
+        el.textContent = '❌ Erro no POST:\n' + JSON.stringify(d, null, 2);
+      }
+    } catch(e) {
+      el.className = 'result on err';
+      el.textContent = '❌ Resposta não é JSON válido:\n' + txt.substring(0, 500);
+    }
+  } catch(e) {
+    el.className = 'result on err';
+    el.textContent = '❌ Falha de rede:\n' + e.toString();
+  }
+}
+
+function atualizarUrl() {
+  const url = document.getElementById('novaUrl').value.trim();
+  if(!url) return;
+  cfg.url = url;
+  localStorage.setItem('cond_cfg', JSON.stringify(cfg));
+  document.getElementById('urlAtual').textContent = 'URL configurada: ' + url;
+  alert('URL atualizada! Teste a conexão agora.');
+}
+</script>
+</body>
+</html>
